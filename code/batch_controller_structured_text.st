@@ -208,3 +208,53 @@ BEGIN
                #MixPT := T#0S;
          END_CASE;
 
+         "BatchData".Fault := FALSE;
+
+         // Start the batch on a fresh Start press, with a valid recipe and a healthy E-Stop.
+         IF #StartEdge
+            AND ("BatchData".ActiveRecipe >= 1)
+            AND ("BatchData".ActiveRecipe <= 3)
+            AND #EStopOK THEN
+            "BatchData".BatchComplete := FALSE;
+            "BatchData".MixTime_Elapsed := 0;
+            "BatchData".State := 10;       // -> FILLING
+         END_IF;
+
+      10:  // FILLING - inlet valve open until the level reaches the recipe target
+         #Inlet := TRUE;
+         IF "BatchData".Level_PV >= "BatchData".Level_SP THEN
+            "BatchData".State := 20;       // -> HEATING
+         END_IF;
+
+      20:  // HEATING - enable the heater; the PID (OB30) drives temperature to setpoint
+         #HeaterEn := TRUE;
+         IF "BatchData".Temp_PV >= ("BatchData".Temp_SP - 1.0) THEN
+            "BatchData".State := 30;       // -> MIXING (within 1 C of setpoint)
+         END_IF;
+
+      30:  // MIXING - run the agitator for the recipe time; hold temperature with the heater
+         #Agit := TRUE;
+         #HeaterEn := TRUE;
+         IF #ClockTrig.Q THEN
+            "BatchData".MixTime_Elapsed := "BatchData".MixTime_Elapsed + 1;
+         END_IF;
+         IF #MixTimer.Q THEN
+            "BatchData".State := 40;       // -> DRAINING
+         END_IF;
+
+      40:  // DRAINING - outlet valve open until the tank is empty
+         #Outlet := TRUE;
+         IF "BatchData".Level_PV <= 2.0 THEN
+            "BatchData".State := 50;       // -> COMPLETE
+         END_IF;
+
+      50:  // COMPLETE - count the batch, then return to idle
+         "BatchData".BatchCount := "BatchData".BatchCount + 1;
+         "BatchData".BatchComplete := TRUE;
+         "Run_Latch" := FALSE;            // require a fresh Start for the next batch
+         "BatchData".State := 0;          // -> IDLE
+
+      90:  // FAULT / HELD - all actuators safe; wait for a reset
+         "BatchData".Fault := TRUE;
+         IF #EStopOK AND NOT #AbortNow AND "BatchData".Cmd_Reset THEN
+            "BatchData".Alarm_Code := 0;
