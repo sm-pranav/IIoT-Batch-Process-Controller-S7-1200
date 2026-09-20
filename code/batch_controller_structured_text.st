@@ -105,3 +105,66 @@ VERSION : 0.1
    END_VAR
 BEGIN
 END_DATA_BLOCK
+
+
+// ============================================================
+// FB1 : "BatchSequence"  (Structured Text / SCL)
+// ------------------------------------------------------------
+// The ISA-88 style batch state machine, written as a CASE statement.
+// It loads the selected recipe's setpoints, drives the valves /
+// agitator / heater-enable by phase, times the mix with a TON, and
+// advances phase-by-phase. E-Stop and Abort override everything and
+// drive all actuators to a safe state.
+//
+// Call this once per scan from OB1 (Main). PID temperature control
+// runs separately in OB30 (the cyclic interrupt).
+//
+// Phases:  0 IDLE -> 10 FILL -> 20 HEAT -> 30 MIX -> 40 DRAIN
+//          -> 50 COMPLETE -> 0 IDLE      (90 = FAULT / HELD)
+// ============================================================
+
+FUNCTION_BLOCK "BatchSequence"
+{ S7_Optimized_Access := 'TRUE' }
+VERSION : 0.1
+
+   VAR_INPUT
+      StartReq : Bool;      // latched run request from OB1 (Run_Latch, M20.0)
+      EStopOK : Bool;       // E_Stop input I0.2 (TRUE = healthy, NC wiring)
+      Clock1Hz : Bool;      // 1 Hz clock bit M10.5 (for the elapsed-mix counter)
+   END_VAR
+
+   VAR
+      StartTrig : R_TRIG;   // rising edge of the run request
+      ClockTrig : R_TRIG;   // rising edge of the 1 Hz clock
+      MixTimer : TON_TIME;  // mix-time on-delay timer
+      MixPT : Time := T#0S; // mix-time preset (loaded from the recipe)
+   END_VAR
+
+   VAR_TEMP
+      AbortNow : Bool;      // physical Abort button OR remote Cmd_Abort
+      StartEdge : Bool;     // one-scan pulse when Start is pressed
+      Inlet : Bool;         // local actuator decisions for this scan
+      Outlet : Bool;
+      Agit : Bool;
+      HeaterEn : Bool;
+   END_VAR
+
+BEGIN
+
+   // ---- edge detection ----
+   #StartTrig(CLK := #StartReq);
+   #StartEdge := #StartTrig.Q;
+   #ClockTrig(CLK := #Clock1Hz);
+
+   // ---- combined abort: physical button OR remote command ----
+   #AbortNow := "Abort_Button" OR "BatchData".Cmd_Abort;
+
+   // ---- mix timer: counts only while we are in the MIXING phase ----
+   #MixTimer(IN := ("BatchData".State = 30), PT := #MixPT);
+
+   // ---- default every actuator OFF; each phase turns on what it needs ----
+   #Inlet := FALSE;
+   #Outlet := FALSE;
+   #Agit := FALSE;
+   #HeaterEn := FALSE;
+
