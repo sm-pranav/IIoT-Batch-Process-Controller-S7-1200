@@ -168,3 +168,43 @@ BEGIN
    #Agit := FALSE;
    #HeaterEn := FALSE;
 
+   // ---- SAFETY OVERRIDES (highest priority, evaluated before the CASE) ----
+   // E-Stop is wired normally closed, so EStopOK is TRUE when healthy.
+   "BatchData".EStop_Active := NOT #EStopOK;
+   IF NOT #EStopOK THEN
+      "BatchData".State := 90;            // FAULT / HELD
+      "BatchData".Alarm_Code := 1;        // E-Stop
+      "Run_Latch" := FALSE;               // break the start seal
+   ELSIF #AbortNow AND ("BatchData".State <> 0) AND ("BatchData".State <> 90) THEN
+      "BatchData".State := 90;
+      "BatchData".Alarm_Code := 2;        // operator abort
+      "Run_Latch" := FALSE;
+   END_IF;
+
+   // ---- THE STATE MACHINE ----
+   CASE "BatchData".State OF
+
+      0:  // IDLE - all actuators off; keep the selected recipe's setpoints on show
+         CASE "BatchData".ActiveRecipe OF
+            1:  // Product A
+               "BatchData".Temp_SP := 60.0;
+               "BatchData".Level_SP := 80.0;
+               "BatchData".MixTime_SP := 10;
+               #MixPT := T#10S;
+            2:  // Product B
+               "BatchData".Temp_SP := 75.0;
+               "BatchData".Level_SP := 90.0;
+               "BatchData".MixTime_SP := 20;
+               #MixPT := T#20S;
+            3:  // Product C
+               "BatchData".Temp_SP := 50.0;
+               "BatchData".Level_SP := 70.0;
+               "BatchData".MixTime_SP := 15;
+               #MixPT := T#15S;
+            ELSE
+               "BatchData".Temp_SP := 0.0;
+               "BatchData".Level_SP := 0.0;
+               "BatchData".MixTime_SP := 0;
+               #MixPT := T#0S;
+         END_CASE;
+
