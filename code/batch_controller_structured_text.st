@@ -258,3 +258,22 @@ BEGIN
          "BatchData".Fault := TRUE;
          IF #EStopOK AND NOT #AbortNow AND "BatchData".Cmd_Reset THEN
             "BatchData".Alarm_Code := 0;
+            "BatchData".Fault := FALSE;
+            "BatchData".State := 0;        // -> IDLE
+         END_IF;
+
+   END_CASE;
+
+   // ---- drive the physical outputs from this scan's phase decisions ----
+   "Inlet_Valve" := #Inlet;
+   "Outlet_Valve" := #Outlet;
+   "Agitator" := #Agit;
+   "Heater_Contactor" := #HeaterEn;
+
+   "BatchData".BatchRunning := ("BatchData".State >= 10) AND ("BatchData".State <= 40);
+   "Batch_Running" := "BatchData".BatchRunning;
+
+   // flashing beacon while any alarm is active (fed through the 1 Hz clock)
+   "Alarm_Beacon" := ("BatchData".Alarm_Code > 0) AND #Clock1Hz;
+
+END_FUNCTION_BLOCK
