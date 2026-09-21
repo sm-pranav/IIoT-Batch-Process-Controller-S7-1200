@@ -277,3 +277,24 @@ BEGIN
    "Alarm_Beacon" := ("BatchData".Alarm_Code > 0) AND #Clock1Hz;
 
 END_FUNCTION_BLOCK
+
+
+// ============================================================
+// FB2 : "ProcessModel"  (Structured Text / SCL)
+// ------------------------------------------------------------
+// *** SIMULATION ONLY ***
+// Delete or replace this block with real field wiring on real
+// hardware. It fakes the tank physics so PLCSIM has a live process
+// to control:
+//   - the level rises while the inlet valve is open and falls while
+//     the outlet valve is open;
+//   - the temperature approaches (ambient + heater command) as a
+//     simple first-order lag while the heater contactor is enabled,
+//     and cools toward ambient otherwise.
+//
+// Call this once per cycle from OB30 (the 100 ms cyclic interrupt),
+// AFTER the PID call, so it uses the freshest heater command.
+//
+// On real hardware you would instead read the analog inputs and scale
+// them into engineering units - the commented NORM_X/SCALE_X block at
+// the bottom shows exactly how.
