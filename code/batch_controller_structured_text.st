@@ -298,3 +298,43 @@ END_FUNCTION_BLOCK
 // On real hardware you would instead read the analog inputs and scale
 // them into engineering units - the commented NORM_X/SCALE_X block at
 // the bottom shows exactly how.
+// ============================================================
+
+FUNCTION_BLOCK "ProcessModel"
+{ S7_Optimized_Access := 'TRUE' }
+VERSION : 0.1
+
+   VAR_TEMP
+      Target : Real;        // temperature the tank is currently heading toward
+      NormPct : Real;       // 0..1 normalised heater command (for output scaling)
+   END_VAR
+
+BEGIN
+
+   // ---- LEVEL (%) : integrate the valve flows (OB30 runs every 100 ms) ----
+   IF "Inlet_Valve" THEN
+      "BatchData".Level_PV := "BatchData".Level_PV + 2.0;    // ~ +20 %/s
+   END_IF;
+   IF "Outlet_Valve" THEN
+      "BatchData".Level_PV := "BatchData".Level_PV - 2.5;    // ~ -25 %/s
+   END_IF;
+   IF "BatchData".Level_PV > 100.0 THEN
+      "BatchData".Level_PV := 100.0;
+   END_IF;
+   IF "BatchData".Level_PV < 0.0 THEN
+      "BatchData".Level_PV := 0.0;
+   END_IF;
+
+   // ---- TEMPERATURE (deg C) : first-order approach to a target ----
+   // Heat is only applied when the heater contactor is enabled; the PID
+   // (OB30) sets Heater_Output 0..100 %. 100 % aims at 125 C, so any
+   // recipe setpoint (50..75 C) is comfortably reachable.
+   IF "Heater_Contactor" THEN
+      #Target := 25.0 + ("BatchData".Heater_Output * 1.0);   // 25..125 C
+   ELSE
+      #Target := 25.0;                                       // 25 C ambient
+   END_IF;
+   "BatchData".Temp_PV := "BatchData".Temp_PV
+                        + (#Target - "BatchData".Temp_PV) * 0.05;   // tau ~ 2 s
+
+   // ---- ANALOG OUTPUT SCALING (real, kept for hardware) ----
