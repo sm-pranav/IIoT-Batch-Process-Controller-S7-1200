@@ -1,4 +1,4 @@
-﻿// ============================================================
+// ============================================================
 // PROJECT : Automated Batch Process Controller (PID + ISA-88)
 // PLATFORM: Siemens S7-1200 (CPU 1214C) - TIA Portal V18
 // FILE    : Structured Text (SCL) source for DB1, FB1, FB2
@@ -338,3 +338,25 @@ BEGIN
                         + (#Target - "BatchData".Temp_PV) * 0.05;   // tau ~ 2 s
 
    // ---- ANALOG OUTPUT SCALING (real, kept for hardware) ----
+   // Convert the PID heater command (0..100 %) to the raw analog value
+   // (0..27648) and send it to the QW80 signal board. "Heater_Output" is
+   // the QW80 analog-output tag; "BatchData".Heater_Output is the % value.
+   #NormPct := NORM_X(MIN := 0.0, VALUE := "BatchData".Heater_Output, MAX := 100.0);
+   "Heater_Output" := SCALE_X(MIN := 0, VALUE := #NormPct, MAX := 27648);
+
+   // ============================================================
+   // ON REAL HARDWARE - delete everything above and use this instead.
+   // (First declare these VAR_TEMP locals: #tRaw, #lRaw as Int and
+   //  #tNrm, #lNrm as Real.) The field transmitters drive IW64 / IW66
+   // (0..27648); scale them into engineering units and store into DB1:
+   //
+   //   #tRaw := "Temperature_PV";                 // IW64, 0..27648
+   //   #tNrm := NORM_X(MIN := 0, VALUE := #tRaw, MAX := 27648);   // 0..1
+   //   "BatchData".Temp_PV := SCALE_X(MIN := 0.0, VALUE := #tNrm, MAX := 100.0);
+   //
+   //   #lRaw := "Level_PV";                       // IW66, 0..27648
+   //   #lNrm := NORM_X(MIN := 0, VALUE := #lRaw, MAX := 27648);
+   //   "BatchData".Level_PV := SCALE_X(MIN := 0.0, VALUE := #lNrm, MAX := 100.0);
+   // ============================================================
+
+END_FUNCTION_BLOCK
