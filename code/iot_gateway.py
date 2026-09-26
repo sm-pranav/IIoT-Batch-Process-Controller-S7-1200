@@ -136,3 +136,60 @@ def connect_plc():
 
 
 def read_plc(client):
+    """Read DB1 and unpack the bytes into a Python dictionary.
+
+    The offsets below MUST match the DB1 layout in
+    batch_controller_structured_text.st (38 bytes, non-optimized).
+    """
+    data = client.db_read(DB_NUMBER, 0, DB_SIZE)
+
+    state_val  = get_int(data, 0)
+    recipe_val = get_int(data, 2)
+    alarm_val  = get_int(data, 34)
+
+    return {
+        "session":       SESSION_ID,
+        "state":         state_val,
+        "phase":         STATE_TEXT.get(state_val, "?"),
+        "recipe":        recipe_val,
+        "recipe_name":   RECIPE_TEXT.get(recipe_val, "?"),
+        "temp_sp":       round(get_real(data, 4), 1),
+        "temp_pv":       round(get_real(data, 8), 1),
+        "level_sp":      round(get_real(data, 12), 1),
+        "level_pv":      round(get_real(data, 16), 1),
+        "heater":        round(get_real(data, 20), 1),
+        "mix_sp":        get_int(data, 24),
+        "mix_elapsed":   get_int(data, 26),
+        "batch_count":   get_dint(data, 28),
+        "batch_running": get_bool(data, 32, 0),
+        "batch_complete": get_bool(data, 32, 1),
+        "fault":         get_bool(data, 32, 2),
+        "estop":         get_bool(data, 32, 3),
+        "alarm_code":    alarm_val,
+        "alarm_text":    ALARM_TEXT.get(alarm_val, "Unknown alarm"),
+        "alarm_active":  (alarm_val != 0),
+        "ts":            int(time.time()),
+    }
+
+
+def pulse_command(client, name):
+    """Write a short TRUE pulse to one command bit, then clear it.
+
+    Only the command byte (36) is touched, so this never disturbs
+    the rest of DB1.
+    """
+    bit = CMD_BITS.get(name)
+    if bit is None:
+        print(f"[CMD ] Ignored unknown command '{name}'")
+        return
+
+    buf = bytearray(1)
+    set_bool(buf, 0, bit, True)
+    client.db_write(DB_NUMBER, CMD_BYTE, buf)   # set the bit
+    time.sleep(0.3)                             # hold long enough for the PLC scan
+    set_bool(buf, 0, bit, False)
+    client.db_write(DB_NUMBER, CMD_BYTE, buf)   # clear it
+    print(f"[CMD ] Sent '{name}' to PLC.")
+
+
+# -------------------------------------------------------------
