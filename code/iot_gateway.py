@@ -238,3 +238,23 @@ def main():
         # paho-mqtt 1.x
         mqtt_client = mqtt.Client(client_id=client_id, userdata={"plc": plc})
 
+    mqtt_client.on_connect = on_connect
+    mqtt_client.on_message = on_message
+    mqtt_client.connect(MQTT_BROKER, MQTT_PORT, keepalive=30)
+    mqtt_client.loop_start()          # handle MQTT traffic in the background
+
+    try:
+        while True:
+            try:
+                sample = read_plc(plc)
+                mqtt_client.publish(TOPIC_TELEMETRY, json.dumps(sample))
+
+                flag = "ALARM" if sample["alarm_active"] else "ok   "
+                print(f"[DATA] {flag} phase={sample['phase']:<12} "
+                      f"recipe={sample['recipe_name']:<10} "
+                      f"T={sample['temp_pv']:>5}/{sample['temp_sp']:<5}C "
+                      f"L={sample['level_pv']:>5}% "
+                      f"heat={sample['heater']:>5}% "
+                      f"batches={sample['batch_count']}")
+            except Exception as exc:
+                # Lost the PLC (e.g. PLCSIM stopped). Reconnect and continue.
