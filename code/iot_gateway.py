@@ -1,4 +1,4 @@
-﻿# =============================================================
+# =============================================================
 #  Automated Batch Process Controller - IoT Gateway
 #  Reads live data from the Siemens PLC (running in PLCSIM) over
 #  the S7 protocol, then publishes it to an MQTT broker as JSON.
@@ -258,3 +258,27 @@ def main():
                       f"batches={sample['batch_count']}")
             except Exception as exc:
                 # Lost the PLC (e.g. PLCSIM stopped). Reconnect and continue.
+                print(f"[PLC ] Read error: {exc}. Reconnecting ...")
+                try:
+                    plc.disconnect()
+                except Exception:
+                    pass
+                plc = connect_plc()
+                mqtt_client.user_data_set({"plc": plc})
+
+            time.sleep(PUBLISH_PERIOD)
+
+    except KeyboardInterrupt:
+        print("\n[EXIT] Stopping gateway ...")
+    finally:
+        mqtt_client.loop_stop()
+        mqtt_client.disconnect()
+        try:
+            plc.disconnect()
+        except Exception:
+            pass
+        print("[EXIT] Clean shutdown. Bye.")
+
+
+if __name__ == "__main__":
+    main()
