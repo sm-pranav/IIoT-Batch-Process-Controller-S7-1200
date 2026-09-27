@@ -193,3 +193,48 @@ def pulse_command(client, name):
 
 
 # -------------------------------------------------------------
+#  MQTT CALLBACKS
+# -------------------------------------------------------------
+def on_connect(client, userdata, flags, rc):
+    if rc == 0:
+        print(f"[MQTT] Connected to {MQTT_BROKER}. Session id = '{SESSION_ID}'")
+        client.subscribe(TOPIC_COMMAND)
+        print(f"[MQTT] Listening for commands on: {TOPIC_COMMAND}")
+    else:
+        print(f"[MQTT] Connect failed with code {rc}")
+
+
+def on_message(client, userdata, msg):
+    """A command arrived from the dashboard. Forward it to the PLC."""
+    plc_client = userdata["plc"]
+    try:
+        payload = json.loads(msg.payload.decode("utf-8"))
+        command = str(payload.get("cmd", "")).lower()
+        pulse_command(plc_client, command)
+    except Exception as exc:
+        print(f"[MQTT] Bad command message: {exc}")
+
+
+# -------------------------------------------------------------
+#  MAIN
+# -------------------------------------------------------------
+def main():
+    print("=" * 55)
+    print("  Batch Process Controller Gateway  (S7 -> MQTT)")
+    print("=" * 55)
+
+    plc = connect_plc()
+
+    # A unique MQTT client id avoids clashes on the public broker.
+    client_id = f"batch-gw-{uuid.uuid4().hex[:6]}"
+
+    # paho-mqtt 2.x requires a callback API version; 1.x has no such argument.
+    # Importing from paho.mqtt.enums (which only exists in 2.x) lets us support BOTH.
+    try:
+        from paho.mqtt.enums import CallbackAPIVersion
+        mqtt_client = mqtt.Client(callback_api_version=CallbackAPIVersion.VERSION1,
+                                  client_id=client_id, userdata={"plc": plc})
+    except ImportError:
+        # paho-mqtt 1.x
+        mqtt_client = mqtt.Client(client_id=client_id, userdata={"plc": plc})
+
