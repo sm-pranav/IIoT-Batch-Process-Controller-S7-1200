@@ -215,3 +215,176 @@
   .footer { color: var(--muted); font-size: 11px; text-align: center; margin-top: 18px; }
   .mt16 { margin-top: 16px; }
 </style>
+</head>
+<body>
+
+<header>
+  <div>
+    <h1>Batch Process Controller &mdash; Live Monitoring</h1>
+    <div class="sub">Siemens S7-1200 &bull; PID temperature control &bull; ISA-88 recipe sequencing &bull; PLCSIM &bull; snap7 &bull; MQTT</div>
+  </div>
+  <div class="conn">
+    <div class="status"><span id="dot" class="dot"></span><span id="connText">Disconnected</span></div>
+    <div class="session">
+      Session: <input id="sessionId" value="demo01" />
+      <button id="connectBtn">Connect</button>
+    </div>
+  </div>
+</header>
+
+<!-- Phase stepper -->
+<div class="stepper" id="stepper">
+  <div class="step" data-st="10"><div class="bubble">&#9673;</div><div class="name">Fill</div></div>
+  <div class="step" data-st="20"><div class="bubble">&#9832;</div><div class="name">Heat</div></div>
+  <div class="step" data-st="30"><div class="bubble">&#10227;</div><div class="name">Mix</div></div>
+  <div class="step" data-st="40"><div class="bubble">&#9660;</div><div class="name">Drain</div></div>
+  <div class="step" data-st="50"><div class="bubble">&#10003;</div><div class="name">Done</div></div>
+</div>
+
+<div class="main">
+  <!-- LEFT: Tank + lamps -->
+  <div class="panel">
+    <h2>Mixing Tank</h2>
+    <div class="tankWrap">
+      <div class="tank">
+        <div id="liquid" class="liquid"></div>
+        <div id="agit" class="agit"></div>
+      </div>
+      <div class="tankScale">Level: <span id="levelTxt" class="num">0.0</span>% &nbsp;|&nbsp; Fill target: <span id="levelSp" class="num">0</span>%</div>
+
+      <div class="lamps">
+        <div class="lamp" id="lampInlet"><span class="led"></span> Inlet valve</div>
+        <div class="lamp" id="lampOutlet"><span class="led"></span> Outlet valve</div>
+        <div class="lamp" id="lampAgit"><span class="led"></span> Agitator</div>
+        <div class="lamp heat" id="lampHeat"><span class="led"></span> Heater</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- RIGHT: KPIs, gauge, trend -->
+  <div>
+    <div class="tiles">
+      <div class="tile">
+        <div class="label">Phase</div>
+        <div class="value" id="phase" style="font-size:22px">IDLE</div>
+      </div>
+      <div class="tile amber">
+        <div class="label">Active Recipe</div>
+        <div class="value" id="recipe" style="font-size:22px">None</div>
+      </div>
+      <div class="tile hot">
+        <div class="label">Heater Output</div>
+        <div class="value num" id="heater">0<small>%</small></div>
+      </div>
+      <div class="tile violet">
+        <div class="label">Batches Done</div>
+        <div class="value num" id="batchCount">0</div>
+      </div>
+    </div>
+
+    <div class="row2">
+      <!-- Temperature gauge -->
+      <div class="panel">
+        <h2>Temperature</h2>
+        <canvas id="gauge" width="260" height="180"></canvas>
+      </div>
+
+      <!-- Trend chart -->
+      <div class="panel">
+        <h2>Temperature Trend &mdash; setpoint vs actual (last 30)</h2>
+        <canvas id="trend" width="700" height="240"></canvas>
+        <div class="legend">
+          <span><i class="swatch" style="background:#f3b23c"></i> Setpoint</span>
+          <span><i class="swatch" style="background:#22c9a6"></i> Actual</span>
+          <span>Mix: <b id="mixTxt" class="num" style="color:#d7efe6">0 / 0 s</b></span>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Recipe selector -->
+<div class="panel mt16">
+  <h2>Recipe Selection</h2>
+  <div class="recipes">
+    <div class="recipe" id="rec1" data-cmd="recipe1">
+      <div class="rname">1 &bull; Product A</div>
+      <div class="rspec">60 &deg;C &bull; mix 10 s &bull; fill 80%</div>
+    </div>
+    <div class="recipe" id="rec2" data-cmd="recipe2">
+      <div class="rname">2 &bull; Product B</div>
+      <div class="rspec">75 &deg;C &bull; mix 20 s &bull; fill 90%</div>
+    </div>
+    <div class="recipe" id="rec3" data-cmd="recipe3">
+      <div class="rname">3 &bull; Product C</div>
+      <div class="rspec">50 &deg;C &bull; mix 15 s &bull; fill 70%</div>
+    </div>
+  </div>
+</div>
+
+<!-- Controls -->
+<div class="panel mt16">
+  <h2>Remote Control</h2>
+  <div class="controls">
+    <button class="btn-start" data-cmd="start">START</button>
+    <button class="btn-stop"  data-cmd="stop">STOP</button>
+    <button class="btn-abort" data-cmd="abort">ABORT</button>
+    <button class="btn-reset" data-cmd="reset">RESET</button>
+  </div>
+</div>
+
+<div class="row2 mt16">
+  <!-- Alarms -->
+  <div class="panel" id="alarmPanel">
+    <h2>Alarms</h2>
+    <div id="alarmList">
+      <div class="alarm-row"><span class="alarm-ok">No active alarms</span><span></span></div>
+    </div>
+  </div>
+
+  <!-- Batch history -->
+  <div class="panel">
+    <h2>Batch History</h2>
+    <div id="history">
+      <div class="hrow"><span class="tag">Waiting for completed batches...</span><span class="time"></span></div>
+    </div>
+  </div>
+</div>
+
+<div class="footer">Data is read from the PLC by iot_gateway.py and delivered over MQTT (broker.hivemq.com). Control commands travel back the same path.</div>
+
+<script>
+/* ======================================================
+   1) CONFIG + STATE
+   ====================================================== */
+const BROKER = "wss://broker.hivemq.com:8884/mqtt";
+let client = null;
+let topicTelemetry = "";
+const spHist = [];      // temperature setpoint samples
+const pvHist = [];      // temperature actual samples
+const MAX_POINTS = 30;
+let lastBatchCount = null;
+
+/* ======================================================
+   2) SMALL DOM HELPERS
+   ====================================================== */
+const $ = (id) => document.getElementById(id);
+
+function setConnected(ok) {
+  $("dot").classList.toggle("on", ok);
+  $("connText").textContent = ok ? "Connected" : "Disconnected";
+}
+
+/* Blend a cool colour into a hot colour by temperature (25..100 C). */
+function tempColour(t) {
+  const f = Math.max(0, Math.min(1, (t - 25) / 75));
+  const c1 = [46, 198, 214];    // cool teal
+  const c2 = [255, 107, 61];    // hot orange
+  const r = Math.round(c1[0] + (c2[0] - c1[0]) * f);
+  const g = Math.round(c1[1] + (c2[1] - c1[1]) * f);
+  const b = Math.round(c1[2] + (c2[2] - c1[2]) * f);
+  return `rgb(${r},${g},${b})`;
+}
+
+/* ======================================================
+   3) MQTT CONNECT / SUBSCRIBE
