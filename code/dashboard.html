@@ -388,3 +388,53 @@ function tempColour(t) {
 
 /* ======================================================
    3) MQTT CONNECT / SUBSCRIBE
+   ====================================================== */
+function connect() {
+  const session = $("sessionId").value.trim() || "demo01";
+  topicTelemetry = `iiot/batch/${session}/telemetry`;
+
+  if (client) { try { client.end(true); } catch (e) {} }
+
+  const clientId = "batch-dash-" + Math.random().toString(16).slice(2, 8);
+  client = mqtt.connect(BROKER, { clientId, connectTimeout: 8000, reconnectPeriod: 3000 });
+
+  client.on("connect", () => {
+    setConnected(true);
+    client.subscribe(topicTelemetry);
+  });
+  client.on("reconnect", () => { $("connText").textContent = "Reconnecting..."; });
+  client.on("close",  () => setConnected(false));
+  client.on("error",  (e) => { console.error(e); setConnected(false); });
+  client.on("message", (t, payload) => {
+    try { update(JSON.parse(payload.toString())); }
+    catch (e) { console.error("Bad payload", e); }
+  });
+}
+
+function sendCommand(cmd) {
+  if (!client || !client.connected) { alert("Connect first."); return; }
+  const session = $("sessionId").value.trim() || "demo01";
+  client.publish(`iiot/batch/${session}/cmd`, JSON.stringify({ cmd }));
+}
+
+/* ======================================================
+   4) UPDATE THE UI FROM ONE TELEMETRY SAMPLE
+   ====================================================== */
+function update(d) {
+  // ----- KPI tiles -----
+  $("phase").textContent  = d.phase || "IDLE";
+  $("recipe").textContent = d.recipe_name || "None";
+  $("heater").innerHTML   = `${Math.round(d.heater)}<small>%</small>`;
+  $("batchCount").textContent = d.batch_count;
+  $("mixTxt").textContent = `${d.mix_elapsed} / ${d.mix_sp} s`;
+
+  // ----- fault colouring of the phase tile -----
+  $("phase").style.color = (d.state === 90) ? "var(--red)" : "var(--text2)";
+
+  // ----- tank -----
+  const lvl = Math.max(0, Math.min(100, Number(d.level_pv) || 0));
+  $("liquid").style.height = lvl + "%";
+  const col = tempColour(Number(d.temp_pv) || 25);
+  $("liquid").style.background = `linear-gradient(180deg, ${col}, ${col})`;
+  $("levelTxt").textContent = lvl.toFixed(1);
+  $("levelSp").textContent  = Math.round(d.level_sp);
