@@ -438,3 +438,53 @@ function update(d) {
   $("liquid").style.background = `linear-gradient(180deg, ${col}, ${col})`;
   $("levelTxt").textContent = lvl.toFixed(1);
   $("levelSp").textContent  = Math.round(d.level_sp);
+
+  // ----- valve / agitator / heater lamps (derived from the phase) -----
+  const st = d.state;
+  toggleLamp("lampInlet",  st === 10);
+  toggleLamp("lampOutlet", st === 40);
+  toggleLamp("lampAgit",   st === 30);
+  toggleLamp("lampHeat",   (st === 20 || st === 30) && d.heater > 1);
+  $("agit").classList.toggle("spin", st === 30);
+
+  // ----- phase stepper -----
+  updateStepper(st);
+
+  // ----- recipe selection highlight -----
+  ["rec1", "rec2", "rec3"].forEach((id, i) =>
+    $(id).classList.toggle("sel", d.recipe === (i + 1)));
+
+  // ----- alarms -----
+  renderAlarms(d);
+
+  // ----- batch history (fires when the counter increments) -----
+  trackHistory(d);
+
+  // ----- charts -----
+  spHist.push(Number(d.temp_sp) || 0);
+  pvHist.push(Number(d.temp_pv) || 0);
+  if (spHist.length > MAX_POINTS) spHist.shift();
+  if (pvHist.length > MAX_POINTS) pvHist.shift();
+  drawTrend();
+  drawGauge(Number(d.temp_pv) || 0, Number(d.temp_sp) || 0);
+}
+
+function toggleLamp(id, on) { $(id).classList.toggle("on", !!on); }
+
+function updateStepper(st) {
+  const order = { 10: 0, 20: 1, 30: 2, 40: 3, 50: 4 };
+  const cur = order[st];
+  document.querySelectorAll("#stepper .step").forEach((el, i) => {
+    el.classList.remove("active", "done");
+    if (cur === undefined) return;              // idle / fault -> nothing lit
+    if (i < cur) el.classList.add("done");
+    else if (i === cur) el.classList.add("active");
+  });
+}
+
+function renderAlarms(d) {
+  const panel = $("alarmPanel"), list = $("alarmList");
+  const active = !!d.alarm_active;
+  panel.classList.toggle("active", active);
+  if (active) {
+    const time = new Date().toLocaleTimeString();
