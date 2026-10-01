@@ -488,3 +488,43 @@ function renderAlarms(d) {
   panel.classList.toggle("active", active);
   if (active) {
     const time = new Date().toLocaleTimeString();
+    list.innerHTML =
+      `<div class="alarm-row"><span class="alarm-bad">&#9888; ${d.alarm_text}</span>` +
+      `<span class="num">${time}</span></div>`;
+  } else {
+    list.innerHTML =
+      `<div class="alarm-row"><span class="alarm-ok">No active alarms</span><span></span></div>`;
+  }
+}
+
+function trackHistory(d) {
+  if (lastBatchCount === null) { lastBatchCount = d.batch_count; return; }
+  if (d.batch_count > lastBatchCount) {
+    const list = $("history");
+    if (list.querySelector(".tag") &&
+        list.firstElementChild.querySelector(".tag").textContent.startsWith("Waiting")) {
+      list.innerHTML = "";
+    }
+    const row = document.createElement("div");
+    row.className = "hrow";
+    row.innerHTML =
+      `<span class="tag">Batch #${d.batch_count} &bull; ${d.recipe_name}</span>` +
+      `<span class="time num">${new Date().toLocaleTimeString()}</span>`;
+    list.prepend(row);
+    lastBatchCount = d.batch_count;
+  } else if (d.batch_count < lastBatchCount) {
+    lastBatchCount = d.batch_count;   // counter was reset
+  }
+}
+
+/* ======================================================
+   5) TEMPERATURE GAUGE (canvas arc, no library)
+   ====================================================== */
+function drawGauge(pv, sp) {
+  const cv = $("gauge"), ctx = cv.getContext("2d");
+  const W = cv.width, H = cv.height;
+  const cx = W / 2, cy = H - 24, R = 92;
+  const A0 = Math.PI, A1 = 2 * Math.PI;         // 180deg sweep (left -> right)
+  const MAXT = 100;
+  ctx.clearRect(0, 0, W, H);
+
