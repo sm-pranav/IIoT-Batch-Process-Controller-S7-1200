@@ -568,3 +568,33 @@ function drawTrend() {
   const maxV = Math.max(100, ...spHist, ...pvHist) * 1.05;
   const stepX = plotW / (MAX_POINTS - 1);
 
+  // grid + y labels
+  ctx.strokeStyle = "#1c322e"; ctx.fillStyle = "#74968c";
+  ctx.font = "11px Consolas, monospace"; ctx.lineWidth = 1; ctx.textAlign = "right";
+  for (let i = 0; i <= 4; i++) {
+    const y = padT + (plotH * i / 4);
+    ctx.beginPath(); ctx.moveTo(padL, y); ctx.lineTo(W - padR, y); ctx.stroke();
+    ctx.fillText(Math.round(maxV * (4 - i) / 4) + "\u00B0", padL - 6, y + 4);
+  }
+
+  const plot = (arr, colour, dashed) => {
+    if (arr.length < 2) return;
+    ctx.beginPath();
+    ctx.setLineDash(dashed ? [6, 5] : []);
+    arr.forEach((v, i) => {
+      const x = padL + i * stepX;
+      const y = padT + plotH - (v / maxV) * plotH;
+      i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+    });
+    ctx.strokeStyle = colour; ctx.lineWidth = 2; ctx.stroke();
+    ctx.setLineDash([]);
+  };
+
+  plot(spHist, "#f3b23c", true);    // setpoint (amber dashed)
+  plot(pvHist, "#22c9a6", false);   // actual (teal solid)
+
+  // marker on the latest actual value
+  if (pvHist.length) {
+    const lx = padL + (pvHist.length - 1) * stepX;
+    const ly = padT + plotH - (pvHist[pvHist.length - 1] / maxV) * plotH;
+    ctx.fillStyle = "#22c9a6";
