@@ -1,4 +1,4 @@
-﻿# Automated Batch Process Controller (PID + ISA-88)
+# Automated Batch Process Controller (PID + ISA-88)
 
 A simulated process-control system built on a Siemens S7-1200. The PLC runs a heated mixing tank through a recipe: it fills to a level, holds a temperature with a PID loop, mixes for a set time, then drains and counts the batch. A Python gateway reads the PLC over the S7 protocol and streams live values to a browser dashboard that can also send commands back.
 
@@ -77,11 +77,11 @@ The gateway reads `DB1` by fixed byte offset over the S7 protocol, turns it into
 
 ```
 02_Batch_Controller/
-â”œâ”€â”€ README.md
-â””â”€â”€ code/
-    â”œâ”€â”€ batch_controller_structured_text.st   PLC source: DB1 + FB1 + FB2 (Structured Text)
-    â”œâ”€â”€ iot_gateway.py                         S7-to-MQTT edge gateway
-    â””â”€â”€ dashboard.html                         single-file web dashboard
+├── README.md
+└── code/
+    ├── batch_controller_structured_text.st   PLC source: DB1 + FB1 + FB2 (Structured Text)
+    ├── iot_gateway.py                         S7-to-MQTT edge gateway
+    └── dashboard.html                         single-file web dashboard
 ```
 
 ## What you need
@@ -235,3 +235,6 @@ A few other honest boundaries:
 
 Reasonable next steps would be to move the PLC link to OPC UA, log each batch and its temperature profile to a database for traceability, add an independent over-temperature interlock on safety-rated hardware, and put the dashboard behind an authenticated broker over TLS.
 
+## Author
+
+Pranav S M
