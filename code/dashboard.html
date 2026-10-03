@@ -598,3 +598,13 @@ function drawTrend() {
     const lx = padL + (pvHist.length - 1) * stepX;
     const ly = padT + plotH - (pvHist[pvHist.length - 1] / maxV) * plotH;
     ctx.fillStyle = "#22c9a6";
+    ctx.beginPath(); ctx.arc(lx, ly, 3.5, 0, Math.PI * 2); ctx.fill();
+  }
+}
+
+/* ======================================================
+   7) WIRE UP EVENTS + AUTO CONNECT
+   ====================================================== */
+$("connectBtn").addEventListener("click", connect);
+document.querySelectorAll(".controls button").forEach((b) =>
+  b.addEventListener("click", () => sendCommand(b.dataset.cmd)));
