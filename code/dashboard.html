@@ -1,4 +1,4 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="UTF-8" />
@@ -608,3 +608,12 @@ function drawTrend() {
 $("connectBtn").addEventListener("click", connect);
 document.querySelectorAll(".controls button").forEach((b) =>
   b.addEventListener("click", () => sendCommand(b.dataset.cmd)));
+document.querySelectorAll(".recipe").forEach((r) =>
+  r.addEventListener("click", () => sendCommand(r.dataset.cmd)));
+
+drawTrend();
+drawGauge(25, 0);
+connect();   // connect automatically on page load
+</script>
+</body>
+</html>
