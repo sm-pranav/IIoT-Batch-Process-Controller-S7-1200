@@ -186,3 +186,52 @@ It connects to PLCSIM at `127.0.0.1`, rack 0, slot 1, reads `DB1`, and publishes
 
 Double-click `code/dashboard.html`. It opens in your browser and connects to the broker on its own. Make sure the Session field reads `demo01` (or whatever you set in the gateway). Live values start updating within a couple of seconds, and the Start/Stop/Abort/Reset and recipe buttons send commands back to the PLC.
 
+## How to verify it works
+
+You can confirm the control logic directly in PLCSIM, then confirm the data path with the gateway and dashboard.
+
+In PLCSIM, add a watch table with `E_Stop`, `Start_Button`, `Recipe1_Select`, `"BatchData".State`, `"BatchData".ActiveRecipe`, `"BatchData".Temp_SP`, `"BatchData".Temp_PV`, `"BatchData".Level_PV`, `"BatchData".Heater_Output`, `"BatchData".MixTime_Elapsed`, and `"BatchData".BatchCount`. Then:
+
+1. Modify `E_Stop` to 1 (it is normally closed, so it must be healthy before anything runs).
+2. Modify `Recipe1_Select` to 1 briefly. `ActiveRecipe` becomes 1, `Temp_SP` becomes 60.0, `Level_SP` becomes 80.0.
+3. Modify `Start_Button` to 1 briefly. Watch the sequence:
+   - `State` goes to 10 and `Level_PV` climbs to 80 in a few seconds.
+   - `State` goes to 20, `Heater_Output` starts high and eases off as `Temp_PV` ramps up and settles near 60.
+   - `State` goes to 30, the agitator runs, and `MixTime_Elapsed` counts up to 10.
+   - `State` goes to 40 and `Level_PV` falls back toward 0.
+   - `State` passes through 50 and returns to 0, and `BatchCount` increases by one.
+4. During a batch, modify `Abort_Button` to 1 (or drop `E_Stop` to 0). `State` jumps to 90, all outputs go off, and `Alarm_Code` becomes 2 (abort) or 1 (E-Stop). Clear the input, then pulse `"BatchData".Cmd_Reset` to return to idle.
+
+With the gateway running you should see a line about every 2 seconds, for example:
+
+```
+[DATA] ok    phase=HEATING      recipe=Product A  T= 46.8/60.0 C L=100.0% heat= 92.0% batches=0
+```
+
+On the dashboard, running a batch fills the tank graphic, shifts its colour as it heats, advances the phase stepper, and draws the actual temperature climbing to meet the setpoint line on the trend. A finished batch adds a timestamped row to the history and increments the counter. The recipe and control buttons drive the same sequence you tested in the watch table.
+
+## Troubleshooting
+
+| Symptom | Cause and fix |
+|:--|:--|
+| Gateway prints "could not find snap7 library" | The native DLL is missing. Put a 64-bit `snap7.dll` next to the script or in `System32`, matching 64-bit Python. |
+| Gateway values are all zero or garbage | `DB1` is still Optimized. Untick "Optimized block access", recompile, and download again. |
+| Gateway keeps retrying "Not ready" | PLCSIM is not in RUN, or the IP/rack/slot is wrong. Set PLCSIM to RUN; keep `127.0.0.1`, rack 0, slot 1. |
+| Batch will not start | `E_Stop` is 0. Set it to 1. Or no recipe is selected, so `ActiveRecipe` is 0. |
+| Temperature never moves | `OB30` is not calling `ProcessModel_DB`, or its cycle time is not 100 ms. Check the two calls and the cyclic time. |
+| Temperature climbs then the PID stops responding | The process value upper limit is too low. Set it to 130 C. |
+| Dashboard stays on "Disconnected" or shows nothing | No internet (the dashboard needs the CDN and the public broker), or the Session field does not match the gateway's `SESSION_ID`. |
+
+## Limitations and scope
+
+This is a simulation, not a wired rig. The tank physics come from `FB2 ProcessModel`, a first-order model running in the PLC. On real hardware you delete that block and instead scale the analog inputs `IW64` and `IW66` into `Temp_PV` and `Level_PV`; the file has a commented block showing the `NORM_X`/`SCALE_X` conversion.
+
+A few other honest boundaries:
+
+- The PLC program is assembled by hand in TIA Portal. Only the Structured Text (the data block and the two function blocks) is provided as source; the ladder, the tag table, the PID configuration, and the interrupt setup are built in the GUI as described above.
+- Once a batch starts, the sequence runs to completion on its own. Abort and E-Stop are the safe interrupts that stop a running batch; the Stop input mainly breaks the start latch. There is no pause and resume.
+- The link uses the raw S7 protocol and a public MQTT broker with no authentication or encryption. The session id is the only separation between users. That is fine for a demo and wrong for anything real.
+- The PID gains are sensible starting values for the simulated plant, not a tuned response for a physical vessel.
+
+Reasonable next steps would be to move the PLC link to OPC UA, log each batch and its temperature profile to a database for traceability, add an independent over-temperature interlock on safety-rated hardware, and put the dashboard behind an authenticated broker over TLS.
+
